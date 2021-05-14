@@ -1,0 +1,178 @@
+Packer - A tool from HashiCorp to automate the creation of machine images
+
+Packer support two configuration file formats. A HCL2 format with a .pkr.hcl file extension and JSON format with a .pkr.json file extension. These configuration files can be used as an individually file or as a collection of files located in a folder. HashiCorp uses a few esoteric terms to describe Packer’s functions. Artifacts are the resulting machine image. Builds are single tasks that will result in an Artifact. Builders are components used by Builds that generate an Artifact using a specific build configuration. Commands are packer command line arguments. Data Sources are configuration that are imported from external sources. Post-processors are tasks that occur after an Artifact is created. Provisioners are tasks configured to run on an Artifact upon first boot. Templates are HCL2 or JSON files that define a specific build configuration used to generate an Artifact.
+
+Packer Commands:
+-h - returns the available commands with a brief summary of each command
+-machine-readable - returns output in a line-oriented, command-delimited text format (timestamp,target,type,data…), also auto enables the -debug Command
+	timestamp is in UTC time of the message
+	target is the empty or a build name
+	type is the category of the message
+	data is values associated with type
+	%!(PACKER_COMMA) replaces commas within the data
+-autocomplete-install - installs packer shell autocompletion feature
+version - returns the version number
+init - downloads and installs required packer plugins from public projects on GitHub
+	PACKER_GITHUB_API_TOKEN - a variable used to define personal access token for GitHub
+	init -upgrade - installs the latests versions of the required plugins
+build - runs Builds to generate Artifacts
+	-color=false - removes colorized output
+	-debug - removes parallelization, may diff for each build
+	-except=foo,bar,baz - provides an exception list for Builds and Post-processors
+	-force - forces a Build to reoccur, may diff for each build
+	-on-error=cleanup - default procedure when a Provisioner fails
+		-on-error=cleanup - cleans up the previous steps, removing the Artifact
+		-on-error=abort - exists and leaves everything intact
+		-on-error=ask - prompt for cleanup, abort or retry
+		-on-error=run-cleanup-provisioner - aborts and only uses the error-cleanup-provisioner
+	-only=foo,bar,baz - provides list of build names to run
+	-parallel-builds=N - Sets the number builds to run in parallel, 0 is the default
+	-timestamp-ui - RFC3339 timestamp prefix for each ui output
+	-var - Used one or more times to set a variable in your packer templates
+	-var-file - Used to set variables from a file
+console - display the results of variable interpolation
+	-var - Used one or more times to set a variable in your packer templates
+	-var-file - Used to set variables from a file
+fix - updates syntax of JSON configuration files
+	-validate=false - removes validation of the fixed JSON file
+fmt - fixes the canonical format and style of a HCL2 configuration file and writes it back to the file
+	-check - Exits with a 0 if the input is already formatted and non-zero if it’s not
+	-diff - returns the differences of any formatting change
+	-write=false - disables writing the formatting changes back t the file
+inspect - returns the sections of a configuration file in human readable output
+validate - validates the syntax and configuration of a configuration file, exits 0 on success and none-zero on failure
+	-syntax-only - only the syntax is checked
+	-except=foo,bar,baz - validates configurations files except the ones listed
+	-only=foo,bar,baz - only validates the configuration files listed
+	-machine-readable - returns all output in machine readable format
+	-var - Used one or more times to set a variable in your packer templates
+	-var-file - Used to set variables from a file
+hcl2_upgrade - converts a JSON configuration file to a HCL2
+	-output-file - resulting HCL2 configuration file
+	-with-annotations - includes annotations with information in the resulting HCL2
+
+The -only / -except flags will match a source’s type.name and run only matching builders (source) or all referenced builders ‘except’ the matching ones
+Packer doesn’t support user-defined blocks and so only the blocks built in to the language are available for use
+
+Packer Templates:
+Prior to version 1.7.0, JSON templates were used, and now HCL2 is the official preferred way to write templates
+
+HCL2 Templates Built-in Blocks:
+build - specific combination of builders, provisioners, and post-processors used to create a specific image artifact
+	The build block defines what builders are started, how to provision them and if necessary what to do with their artifacts using post-process
+	To use builders in a build block you can either:
+		Set the sources array of string with references to pre-defined sources
+		Define build-level source blocks. This also allows you to set specific fields
+	The optional name field of the build block can be used to set the name of a build. Named builds will prefix the log lines in a packer build with the name of the build block
+	How to create a custom builder: https://www.packer.io/docs/plugins/creation/custom-builders
+source - builder plugins that can be used to further confined by the build blocks
+	The source block nested in a build block allows you to use an already defined source and to fill in those files which aren’t already set in the top-level source block.
+	It defines reusable builder configuration blocks
+provisioner - provisioner plugins that are nested inside of a build block
+post-processor and post-processors - post-processor plugins and post-processor plugin sequences nested within the build blocks
+variable - variables that can either be defaulted in configuration or set by the user at runtime
+	Defines variables with your packer configuration, variables in one variable block cannot be used in another variable
+	variable block can contain to following keys
+	type - variables type constraint
+	default - If a default value is set, then the variable is optional, otherwise a variable value is required, also it can contains multiple variables in a key/pair dictionary
+	description - a string containing the description of the variable
+	sensitive - true/false, when a variable is sensitive all string-values from that variable will be obfuscated from packer’s output
+	validation - one ore more blocks with arbitrary custom validation rules
+		condition - an expression that must use the value of the variable to return true if the value is valid or false if it’s invalid, if the failure of the an expression is the basis of the validation decision, use the can function to detect the error
+		error_message - should be set to a string explaining the error and display if the validate fails
+locals - variables that can be created using HCL functions or data sources, or composited from variables created in the variable blocks
+	contains definition of local variables
+packer - provide information to the Packer core about what version is allowed to run, only constant values can be used
+	required_version - version constraint string which specifies which versions of packer used with your configuration
+	required_plugins - specifics all the plugins required by the current config, mapping each local plugin name to a source address and version constraint
+	Version Constraint Syntax
+		= (or no operator) - allows only one exact version number and can’t combine other conditions
+		!= - excludes an exact version number
+		> , >= , < , <= - comparisons against a specified version, allowing versions for which the comparison is true
+		~> - allows the specified version, plus newer versions that only increases the most specific segment of the specified version number. ~> 0.9 is equivalent to >= 0.9, < 1.0.
+		A prerelease version is only math with = operator
+data - defines data sources within your packer configuration
+
+Packer Functions - builtin functions to call from within expressions to transform and combine values, user-defined functions are not supported.
+Contextual Functions - functions used to import external data
+	aws_secretsmanager_key(name, key) - if key is not set, then the first secret key stored in secret name is returned. This function can be used in locals block or directly inline
+	consul_key( “myservice/version”) - will load the key stored at “myservice/version” and can either use this function in a locals block or directly inline where you want to use the value
+	env(“string”) - allows you to get value of an enivornment variable only inside of a variable block
+	vault(name, key) - retrieves a key pair from a vault only from the locals block
+Numeric Functions -builtin functions to basic mathematics
+	abs(number) - returns the absolute value of a given number
+	ceil(number) - returns the closest whole number that is greater than or equal to the given value, which may be a fraction
+	floor(number) - returns the closest whole number that is less than or equal to the given value, which may be a fraction
+	log(number) - returns the logarithm of a given number in a given base
+	max([number, number, number]…) - returns the greatest number from the set
+	min([number, number, number]…) - returns the smallest number from the set
+	parseint(string, number) - returns the resulting number when given a string representation of a given number and a base between 2 and 62.
+	power(number, number) - returns the exponent by calculating the first number raised by the power of the second number
+	signum(number) - returns the number between -1 and 1 to represents the sign of number
+String Functions - builtin functions for string manipulation
+	chomp(string) - returns the string without the newline characters
+	format(spec, values…) - is similar to a printf function in C, outputs a string based on a specific string format including values and verbs
+		%% - literal percent sign, consuming no value
+		%v - default formatting based on the value type
+			string - %s
+			number - %g
+			bool - %t
+			any other - %#v
+			null - used with %v or %#v will cause an error for other verbs
+		%#v - JSON serialization of the value, as with jsonencode
+		%t - convert to boolean and produce true or false
+		%b - convert to integer number or produce binary representation
+		%d - convert to integer number and produce decimal representation
+		%o - convert to integer number and produce octal representation
+		%x - convert to integer number and produce hexadecimal representation with lowercase letters
+		%X - convert to integer number and produce hexadecimal representation with uppercase letters
+		%e - convert to number and produce scientific notation
+		%E - convert to number and produce scientific notation with uppercase E
+		%f - convert to number and produce decimal fraction notation with no exponent
+			. - a width modifier that precedes a verb specifying the length
+				%f - default width and precision
+				%9f - width of 9 and default precision
+				%.2f - default width, precision of 2
+				%9.2f - with of 9 and precision of 2
+		%g - convert to number and produce scientific notation for large exponents, uses a lowercase e
+		%G - convert to number and produce scientific notation for large exponents, uses an uppercase E
+		%s - convert to string and insets the string’s characters
+		%q - convert to string and produce a JSON quoted string representation
+		The following symbols can be used with any verb after % to set additional flags:
+			space - leaves a space where the sign would be if a number is positive
+			+ - shows the sign of a number even if it’s positive
+			- - pad the width with spaces on the left rather than on the right
+			0 - pad the width with leading zeros rather than spaces
+	formatlist(spec, values…) - returns a list of strings from a string format and list values
+	indent(num_spaces, string) - returns num_spaces to the begin of all lines except the first line of a string with  multiple lines
+	join(separator, list) - returns a string with all the elements in a list joined into a single string including the separator at the ned of each item
+	lower(string) - returns a string in all lowercase
+	replace(string, substring, replacement) - returns a string where the replacement takes the place of the substring
+	regex_replace(string, substring, replacement) - returns a string where the replacement takes the place of the substring, both string and substring can be regular expressions
+		substring - doesn’t require a forward slash as it always treated as a regular expression
+		replacement - capture strings uses $n or ${n} where n is the index of the capture group 	regex(pattern, string) - returns the matching substrings of a string that matches the pattern
+	split(separator, string) - returns a lists that is a results of string divided by its separator
+	strrev(string) - returns a string in reverse order, strings are treated as Unicode
+	substr(string, offset, length) - returns a string starting at the offset ends the length of Unicode characters
+	title(string) - returns a string with the first letter of each word uppercase
+	trim(string, substring) - returns a string where all occurrences of the substring is removed from the string
+	trimprefix(string, substring) - returns a string where the substring is removed from the prefix of the string
+	trimsuffix(string, substring) - returns a string where the substring is removed from the suffix of the string
+	trimspace(string) - returns a string with spaces, tabs, newlines and other space like characters removed from the string
+	upper(string) - returns a string that’s all uppercase
+Collection Functions - builtin functions designed to transform and manipulate lists
+	chunklist(list, chunk_size) - splits a list into smaller list with a specified size
+	coalesce(null, argument) - returns first argument that isn’t null, it can handle multiple arguments
+	coalescelist([], [“a”, “b”]) - returns the first list argument that isn’t empty
+	compact([“a”, “b”, “c”, “”]) - returns a list with all empty elements removed
+	combine([“a”, “b”], [“c”, “d”]) - returns a single list which is a combination of two list
+	contains(list, value) - returns true if the value is an element of the list and false if it isn’t
+	distinct(list) - returns a list with duplicate elements removed
+	element(list, index) - returns an element from the specified index, index starts at 0
+	flatten([“a”, “b”], [], [“c”]]) - returns a single list with all specified list contents excluding empty elements
+	index(list, value) - returns the index of specific element in a list
+	keys(argument) - returns list with only the keys of a map
+	length(argument) - returns the length of the list
+	lookup(map, key, default) - returns a value based on the key and if the key doesn’t exists it returns the default value
+	merge(list, list) - returns a map from multiple maps
+	range(arguments) - returns a list of numbers using a start, limit and step values
